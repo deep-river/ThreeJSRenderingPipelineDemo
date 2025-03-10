@@ -416,10 +416,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - Three.js community for their excellent 3D library
 - WebGL and graphics programming resources that inspired this educational tool
-- All contributors and testers who helped refine this visualization
 
 ---
 
 Designed and developed for educational purposes to make computer graphics concepts more accessible and understandable.
-
-找到具有 1 个许可证类型的类似代码
