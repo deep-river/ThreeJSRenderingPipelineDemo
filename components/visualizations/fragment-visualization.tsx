@@ -10,8 +10,33 @@ interface FragmentVisualizationProps {
 }
 
 export function FragmentVisualization({ scene, lightingMode }: FragmentVisualizationProps) {
-  // Clone the scene to avoid modifying the original
-  const clonedScene = useMemo(() => scene.clone(), [scene])
+  // 克隆场景但确保正确处理材质
+  const clonedScene = useMemo(() => {
+    const clone = scene.clone();
+    // 确保所有材质都被正确初始化
+    clone.traverse((object) => {
+      if (object instanceof THREE.Mesh) {
+        // 深度克隆材质以避免引用问题
+        if (object.material) {
+          if (Array.isArray(object.material)) {
+            object.material = object.material.map(mat => mat.clone());
+          } else {
+            object.material = object.material.clone();
+          }
+          // 设置needsUpdate确保材质更新
+          if (Array.isArray(object.material)) {
+            object.material.forEach(mat => {
+              mat.needsUpdate = true;
+            });
+          } else {
+            object.material.needsUpdate = true;
+          }
+        }
+      }
+    });
+    return clone;
+  }, [scene]);
+  
   const [splitView, setSplitView] = useState(false)
 
   // Debug props changes
@@ -170,6 +195,28 @@ export function FragmentVisualization({ scene, lightingMode }: FragmentVisualiza
       }
     })
   }, [clonedScene, materials, lightingMode, splitView, splitMaterial])
+
+  // 当光照模式变化时确保更新材质
+  useEffect(() => {
+    console.log("FragmentVisualization: lightingMode changed to", lightingMode);
+    clonedScene.traverse((object) => {
+      if (object instanceof THREE.Mesh && object.material) {
+        const updateMaterial = (material: THREE.Material) => {
+          // 根据不同的光照模式更新材质
+          if (material instanceof THREE.MeshStandardMaterial || 
+              material instanceof THREE.MeshPhongMaterial) {
+            material.needsUpdate = true;
+          }
+        };
+        
+        if (Array.isArray(object.material)) {
+          object.material.forEach(updateMaterial);
+        } else {
+          updateMaterial(object.material);
+        }
+      }
+    });
+  }, [lightingMode, clonedScene]);
 
   // Animate the split material
   useFrame(({ clock }) => {

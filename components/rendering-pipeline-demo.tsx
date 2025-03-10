@@ -84,6 +84,23 @@ export function RenderingPipelineDemo() {
     enablePixel,
   ])
 
+  useEffect(() => {
+    // 添加额外调试信息来跟踪材质和光照状态
+    const additionalDebug = [
+      `当前渲染阶段: ${currentStage}`,
+      `环境: ${environment}`,
+      `材质状态: ${currentStage === "complete" ? "完整渲染" : "特定阶段可视化"}`,
+    ];
+    
+    setDebugInfo(prev => [...prev, ...additionalDebug]);
+    
+    console.log("渲染状态变化:", { 
+      stage: currentStage,
+      environment,
+      lighting: lightingMode
+    });
+  }, [currentStage, environment, lightingMode]);
+
   const toggleControls = () => setShowControls(!showControls)
 
   // Single rendering path for all stages

@@ -249,89 +249,86 @@ export function Scene({
 
   // 根据环境更新光照
   useEffect(() => {
-    // 移除所有现有光源
-    const lightsToRemove: THREE.Object3D[] = []
-    scene.traverse((object) => {
-      if (
-        object instanceof THREE.DirectionalLight ||
-        object instanceof THREE.PointLight ||
-        object instanceof THREE.SpotLight ||
-        object instanceof THREE.AmbientLight
-      ) {
-        lightsToRemove.push(object)
-      }
-    })
-
-    lightsToRemove.forEach((light) => {
-      scene.remove(light)
-    })
-
-    // 根据环境添加环境光
-    let ambientIntensity = 0.5
-    let ambientColor = 0x404040
-    let directionalIntensity = 1.5
-    let directionalColor = 0xffffff
-    let lightPosition: [number, number, number] = [5, 5, 5]
+    // 不再完全移除光源，而是更新现有光源
+    let ambientIntensity = 0.5;
+    let ambientColor = 0x404040;
+    let directionalIntensity = 1.5;
+    let directionalColor = 0xffffff;
+    let lightPosition: [number, number, number] = [5, 5, 5];
 
     switch (environment) {
       case "daytime":
-        ambientIntensity = 0.7
-        ambientColor = 0x90a0ff // 略带蓝色的天空颜色
-        directionalIntensity = 1.8
-        directionalColor = 0xffffcc // 温暖的阳光
-        lightPosition = [5, 8, 5]
-        break
+        ambientIntensity = 0.7;
+        ambientColor = 0xffffff;
+        directionalIntensity = 1.5;
+        directionalColor = 0xffffff;
+        lightPosition = [5, 5, 5];
+        break;
       case "nighttime":
-        ambientIntensity = 0.2
-        ambientColor = 0x101030 // 深蓝色夜晚
-        directionalIntensity = 0.8
-        directionalColor = 0xaaaaff // 冷色调月光
-        lightPosition = [3, 5, 3]
-        break
+        ambientIntensity = 0.2;
+        ambientColor = 0x101020;
+        directionalIntensity = 0.8;
+        directionalColor = 0xaaaaff;
+        lightPosition = [3, 5, 3];
+        break;
       case "rainy":
-        ambientIntensity = 0.4
-        ambientColor = 0x606080 // 阴天
-        directionalIntensity = 1.0
-        directionalColor = 0xcccccc // 漫射光
-        lightPosition = [4, 6, 4]
-        break
+        ambientIntensity = 0.4;
+        ambientColor = 0x606080;
+        directionalIntensity = 1.0;
+        directionalColor = 0xcccccc;
+        lightPosition = [4, 6, 4];
+        break;
     }
 
-    // 添加环境光进行基本照明
-    const ambientLight = new THREE.AmbientLight(ambientColor, ambientIntensity)
-    scene.add(ambientLight)
-    ambientLightRef.current = ambientLight
+    // 更新或创建环境光
+    if (ambientLightRef.current) {
+      ambientLightRef.current.color.set(ambientColor);
+      ambientLightRef.current.intensity = ambientIntensity;
+    } else {
+      const ambientLight = new THREE.AmbientLight(ambientColor, ambientIntensity);
+      scene.add(ambientLight);
+      ambientLightRef.current = ambientLight;
+    }
 
     // 更新方向光属性
     if (directionalLightRef.current) {
-      const dirLight = directionalLightRef.current
-      dirLight.intensity = directionalIntensity
-      dirLight.color.set(directionalColor)
-      dirLight.position.set(...lightPosition)
+      directionalLightRef.current.intensity = directionalIntensity;
+      directionalLightRef.current.color.set(directionalColor);
+      directionalLightRef.current.position.set(...lightPosition);
+      // 确保阴影图需要更新
+      directionalLightRef.current.shadow.needsUpdate = true;
     }
 
     // 更新点光源属性
     if (pointLightRef.current) {
-      const pointLight = pointLightRef.current
-      pointLight.intensity = directionalIntensity
-      pointLight.color.set(directionalColor)
-      pointLight.position.set(...lightPosition)
+      pointLightRef.current.intensity = directionalIntensity;
+      pointLightRef.current.color.set(directionalColor);
+      pointLightRef.current.position.set(...lightPosition);
+      pointLightRef.current.shadow.needsUpdate = true;
     }
 
     // 更新聚光灯属性
     if (spotLightRef.current) {
-      const spotLight = spotLightRef.current
-      spotLight.intensity = directionalIntensity
-      spotLight.color.set(directionalColor)
-      spotLight.position.set(...lightPosition)
+      spotLightRef.current.intensity = directionalIntensity;
+      spotLightRef.current.color.set(directionalColor);
+      spotLightRef.current.position.set(...lightPosition);
+      spotLightRef.current.shadow.needsUpdate = true;
     }
 
-    return () => {
-      if (ambientLightRef.current) {
-        scene.remove(ambientLightRef.current)
+    // 强制更新场景中所有材质
+    scene.traverse((object) => {
+      if (object instanceof THREE.Mesh && object.material) {
+        if (Array.isArray(object.material)) {
+          object.material.forEach(mat => {
+            mat.needsUpdate = true;
+          });
+        } else {
+          object.material.needsUpdate = true;
+        }
       }
-    }
-  }, [scene, environment])
+    });
+
+  }, [scene, environment]);
 
   // 根据当前阶段应用可视化
   useEffect(() => {
@@ -369,6 +366,24 @@ export function Scene({
         break
     }
   }, [currentStage, showVertices, showNormals, wireframe, backfaceCulling, showDepthBuffer, lightingMode])
+
+  // 在组件加载后进行额外的初始化
+  useEffect(() => {
+    if (currentStage === "complete" && groupRef.current) {
+      // 确保Complete阶段下所有材质都正确初始化
+      groupRef.current.traverse((object) => {
+        if (object instanceof THREE.Mesh && object.material) {
+          if (Array.isArray(object.material)) {
+            object.material.forEach(mat => {
+              mat.needsUpdate = true;
+            });
+          } else {
+            object.material.needsUpdate = true;
+          }
+        }
+      });
+    }
+  }, [currentStage, modelLoaded]);
 
   // 顶点可视化
   const applyVertexVisualization = (group: THREE.Object3D, showVertices: boolean, showNormals: boolean) => {
@@ -743,4 +758,34 @@ export function Scene({
     </>
   )
 }
+
+// // 添加到可视化组件中的通用函数
+// function safeCloneScene(originalScene: THREE.Group) {
+//   // 创建新组而不是克隆
+//   const newGroup = new THREE.Group();
+  
+//   // 仅复制必要的属性
+//   originalScene.traverse((originalObject) => {
+//     if (originalObject instanceof THREE.Mesh) {
+//       // 克隆网格但使用引用的几何体以节省内存
+//       const clonedMesh = new THREE.Mesh(
+//         originalObject.geometry, 
+//         originalObject.material.clone()
+//       );
+      
+//       // 复制变换
+//       clonedMesh.position.copy(originalObject.position);
+//       clonedMesh.rotation.copy(originalObject.rotation);
+//       clonedMesh.scale.copy(originalObject.scale);
+      
+//       // 复制矩阵
+//       clonedMesh.matrix.copy(originalObject.matrix);
+//       clonedMesh.matrixWorld.copy(originalObject.matrixWorld);
+      
+//       newGroup.add(clonedMesh);
+//     }
+//   });
+  
+//   return newGroup;
+// }
 
