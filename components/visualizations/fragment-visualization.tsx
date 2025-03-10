@@ -39,11 +39,6 @@ export function FragmentVisualization({ scene, lightingMode }: FragmentVisualiza
   
   const [splitView, setSplitView] = useState(false)
 
-  // Debug props changes
-  useEffect(() => {
-    console.log("FragmentVisualization received lightingMode:", lightingMode)
-  }, [lightingMode])
-
   // Toggle split view every few seconds
   useEffect(() => {
     const interval = setInterval(() => {
@@ -161,8 +156,6 @@ export function FragmentVisualization({ scene, lightingMode }: FragmentVisualiza
 
   // Apply materials based on visualization mode
   useEffect(() => {
-    console.log("Applying material based on lightingMode:", lightingMode, "and splitView:", splitView)
-
     clonedScene.traverse((object) => {
       if (object instanceof THREE.Mesh) {
         if (splitView) {
@@ -172,19 +165,15 @@ export function FragmentVisualization({ scene, lightingMode }: FragmentVisualiza
           switch (lightingMode) {
             case "directional":
               object.material = materials.phong
-              console.log("Applied phong material")
               break
             case "point":
               object.material = materials.pbr
-              console.log("Applied pbr material")
               break
             case "spot":
               object.material = materials.normal
-              console.log("Applied normal material")
               break
             default:
               object.material = materials.phong
-              console.log("Applied default phong material")
           }
         }
 
@@ -198,7 +187,6 @@ export function FragmentVisualization({ scene, lightingMode }: FragmentVisualiza
 
   // 当光照模式变化时确保更新材质
   useEffect(() => {
-    console.log("FragmentVisualization: lightingMode changed to", lightingMode);
     clonedScene.traverse((object) => {
       if (object instanceof THREE.Mesh && object.material) {
         const updateMaterial = (material: THREE.Material) => {
