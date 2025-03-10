@@ -416,7 +416,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - Three.js community for their excellent 3D library
 - WebGL and graphics programming resources that inspired this educational tool
-- All contributors and testers who helped refine this visualization
 
 ---
 
