@@ -51,13 +51,13 @@ Our implementation shows how vertices are processed before rendering. Users can 
 - Wireframe representation of the geometry
 
 ```javascript
-// Example: Vertex stage shader logic
-const vertexShader = `
+vertexShader: `
+  varying vec2 vUv;
   void main() {
-    // Transform vertices from model space to clip space
+    vUv = uv;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
-`;
+`
 ```
 
 ### Geometry Processing
@@ -67,12 +67,69 @@ This stage demonstrates:
 - Back-face culling
 - Clipping against the view frustum
 
+Our implementation applies color-coding to triangles and allows toggling of back-face culling:
+
+```javascript
+// PrimitiveVisualization component applies these materials
+const material = new THREE.MeshBasicMaterial({
+  color: wireframe ? 0x00ff00 : 0xffffff,
+  wireframe: wireframe,
+  side: backfaceCulling ? THREE.FrontSide : THREE.DoubleSide,
+  vertexColors: false,
+  transparent: true,
+  opacity: wireframe ? 0.8 : 1.0,
+})
+
+// For non-wireframe mode, we create a checkerboard pattern
+// by assigning alternating colors to triangles
+if (!wireframe) {
+  const colors = []
+  
+  // Alternating colors for triangles
+  for (let i = 0; i < positionAttribute.count; i += 3) {
+    const color = i % 6 === 0 ? new THREE.Color(0xff5555) : new THREE.Color(0x55ff55)
+    colors.push(color.r, color.g, color.b)
+    colors.push(color.r, color.g, color.b)
+    colors.push(color.r, color.g, color.b)
+  }
+  
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3))
+  material.vertexColors = true
+}
+```
+
 ### Rasterization Stage
 
 Visualizes how geometric primitives are converted to fragments (potential pixels):
 - Triangle traversal
 - Perspective-correct interpolation
 - Screen-space transformation
+
+```javascript
+// Rasterization stage pixel visualization shader
+fragmentShader: `
+  uniform float time;
+  varying vec2 vUv;
+  
+  void main() {
+    // 创建像素化效果
+    float pixelSize = 0.05;
+    vec2 pixelatedUV = floor(vUv / pixelSize) * pixelSize;
+    
+    // 添加网格图案
+    float gridLine = step(0.98, mod(vUv.x / pixelSize, 1.0)) + 
+                    step(0.98, mod(vUv.y / pixelSize, 1.0));
+    
+    // 基于UV坐标的基本颜色
+    vec3 color = vec3(pixelatedUV.x, pixelatedUV.y, sin(time) * 0.5 + 0.5);
+    
+    // 应用网格线
+    color = mix(color, vec3(0.0), gridLine);
+    
+    gl_FragColor = vec4(color, 1.0);
+  }
+`
+```
 
 ### Fragment Stage
 
@@ -82,19 +139,54 @@ Shows the pixel-level operations:
 - Lighting calculations (Phong model and PBR)
 - Material properties application
 
+Our implementation includes a split-view shader that shows different aspects of fragment processing:
+
 ```javascript
-// Example: Fragment stage shader with Phong lighting
-const fragmentShader = `
-  uniform vec3 lightPosition;
+// Fragment stage shader with quadrant visualization
+fragmentShader: `
+  uniform float time;
+  varying vec2 vUv;
   varying vec3 vNormal;
   varying vec3 vPosition;
   
   void main() {
-    vec3 lightDir = normalize(lightPosition - vPosition);
-    float diff = max(dot(vNormal, lightDir), 0.0);
-    gl_FragColor = vec4(diff * diffuseColor, 1.0);
+    // Split the view into quadrants
+    vec2 quadrant = step(vec2(0.5), vUv);
+    float quadrantIndex = quadrant.x + quadrant.y * 2.0;
+    
+    vec3 color;
+    
+    // Quadrant 0: Base color (bottom-left)
+    if (quadrantIndex < 0.5) {
+      color = vec3(0.8, 0.8, 0.8);
+    }
+    // Quadrant 1: Normal map (bottom-right)
+    else if (quadrantIndex < 1.5) {
+      color = vNormal * 0.5 + 0.5;
+    }
+    // Quadrant 2: Roughness/metalness (top-left)
+    else if (quadrantIndex < 2.5) {
+      // Simulate roughness/metalness map
+      float roughness = mod(vPosition.x * 10.0 + vPosition.y * 10.0 + vPosition.z * 10.0, 1.0);
+      float metalness = sin(vPosition.x * 50.0 + time) * 0.5 + 0.5;
+      color = vec3(roughness, metalness, 0.0);
+    }
+    // Quadrant 3: Lighting calculation (top-right)
+    else {
+      // Simple lighting calculation
+      vec3 lightDir = normalize(vec3(sin(time), 1.0, cos(time)));
+      float diffuse = max(dot(vNormal, lightDir), 0.0);
+      vec3 baseColor = vec3(0.8, 0.8, 0.8);
+      color = baseColor * diffuse;
+    }
+    
+    // Add grid lines to separate quadrants
+    float gridLine = step(0.98, mod(vUv.x, 0.5)) + step(0.98, mod(vUv.y, 0.5));
+    color = mix(color, vec3(1.0), gridLine);
+    
+    gl_FragColor = vec4(color, 1.0);
   }
-`;
+`
 ```
 
 ### Complete Rendering
@@ -114,107 +206,144 @@ Our shaders are organized to demonstrate specific rendering concepts:
 
 ### Example Custom Shader Implementations
 
-#### Wireframe Visualization Shader
+#### Fragment Visualization Quadrant Shader
+
+This shader divides the screen into four quadrants, each showing a different aspect of fragment processing:
 
 ```glsl
 // Vertex shader
-uniform float wireframeThickness;
-varying vec3 vBarycentric;
-
-void main() {
-  // Pass barycentric coordinates for wireframe rendering
-  vBarycentric = position;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
-
-// Fragment shader
-varying vec3 vBarycentric;
-uniform vec3 wireframeColor;
-uniform float wireframeThickness;
-
-void main() {
-  // Calculate distance to closest edge for wireframe effect
-  float minDistance = min(min(vBarycentric.x, vBarycentric.y), vBarycentric.z);
-  float edgeFactor = smoothstep(0.0, wireframeThickness, minDistance);
-  
-  // Blend between wireframe color and model color
-  gl_FragColor = mix(vec4(wireframeColor, 1.0), vec4(0.5, 0.5, 0.5, 1.0), edgeFactor);
-}
-```
-
-#### Normal Visualization Shader
-
-```glsl
-// Vertex shader
-varying vec3 vNormal;
-
-void main() {
-  vNormal = normalMatrix * normal;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
-
-// Fragment shader
-varying vec3 vNormal;
-
-void main() {
-  // Visualize normals as RGB colors
-  vec3 normalColor = normalize(vNormal) * 0.5 + 0.5;
-  gl_FragColor = vec4(normalColor, 1.0);
-}
-```
-
-#### Phong Lighting Implementation
-
-```glsl
-// Fragment shader excerpt for Phong lighting
-uniform vec3 lightPosition;
-uniform vec3 viewPosition;
-uniform vec3 ambientColor;
-uniform vec3 diffuseColor;
-uniform vec3 specularColor;
-uniform float shininess;
-
+varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vPosition;
 
 void main() {
-  // Ambient component
-  vec3 ambient = ambientColor;
+  vUv = uv;
+  vNormal = normalize(normalMatrix * normal);
+  vPosition = position;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+
+// Fragment shader
+uniform float time;
+varying vec2 vUv;
+varying vec3 vNormal;
+varying vec3 vPosition;
+
+void main() {
+  // Split the view into quadrants
+  vec2 quadrant = step(vec2(0.5), vUv);
+  float quadrantIndex = quadrant.x + quadrant.y * 2.0;
   
-  // Diffuse component
-  vec3 norm = normalize(vNormal);
-  vec3 lightDir = normalize(lightPosition - vPosition);
-  float diff = max(dot(norm, lightDir), 0.0);
-  vec3 diffuse = diff * diffuseColor;
+  vec3 color;
   
-  // Specular component
-  vec3 viewDir = normalize(viewPosition - vPosition);
-  vec3 reflectDir = reflect(-lightDir, norm);
-  float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
-  vec3 specular = spec * specularColor;
+  // Quadrant 0: Base color (bottom-left)
+  if (quadrantIndex < 0.5) {
+    color = vec3(0.8, 0.8, 0.8);
+  }
+  // Quadrant 1: Normal map (bottom-right)
+  else if (quadrantIndex < 1.5) {
+    color = vNormal * 0.5 + 0.5;
+  }
+  // Quadrant 2: Roughness/metalness (top-left)
+  else if (quadrantIndex < 2.5) {
+    // Simulate roughness/metalness map
+    float roughness = mod(vPosition.x * 10.0 + vPosition.y * 10.0 + vPosition.z * 10.0, 1.0);
+    float metalness = sin(vPosition.x * 50.0 + time) * 0.5 + 0.5;
+    color = vec3(roughness, metalness, 0.0);
+  }
+  // Quadrant 3: Lighting calculation (top-right)
+  else {
+    // Simple lighting calculation
+    vec3 lightDir = normalize(vec3(sin(time), 1.0, cos(time)));
+    float diffuse = max(dot(vNormal, lightDir), 0.0);
+    vec3 baseColor = vec3(0.8, 0.8, 0.8);
+    color = baseColor * diffuse;
+  }
   
-  // Combine lighting components
-  vec3 result = ambient + diffuse + specular;
-  gl_FragColor = vec4(result, 1.0);
+  // Add grid lines to separate quadrants
+  float gridLine = step(0.98, mod(vUv.x, 0.5)) + step(0.98, mod(vUv.y, 0.5));
+  color = mix(color, vec3(1.0), gridLine);
+  
+  gl_FragColor = vec4(color, 1.0);
+}
+```
+
+#### Pixelation Rasterization Shader
+
+This shader demonstrates the rasterization process by creating a pixelated effect with visible grid lines:
+
+```glsl
+// Vertex shader
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+
+// Fragment shader
+uniform float time;
+varying vec2 vUv;
+
+void main() {
+  // Create pixelated effect
+  float pixelSize = 0.05;
+  vec2 pixelatedUV = floor(vUv / pixelSize) * pixelSize;
+  
+  // Add grid pattern
+  float gridLine = step(0.98, mod(vUv.x / pixelSize, 1.0)) + 
+                  step(0.98, mod(vUv.y / pixelSize, 1.0));
+  
+  // Base color based on UV coordinates
+  vec3 color = vec3(pixelatedUV.x, pixelatedUV.y, sin(time) * 0.5 + 0.5);
+  
+  // Apply grid lines
+  color = mix(color, vec3(0.0), gridLine);
+  
+  gl_FragColor = vec4(color, 1.0);
 }
 ```
 
 ### Integration with Three.js
 
-Our implementation connects these GLSL shaders with Three.js materials using `ShaderMaterial` or `RawShaderMaterial`:
+Our implementation connects these GLSL shaders with Three.js materials using `ShaderMaterial`:
 
 ```javascript
-const customMaterial = new THREE.ShaderMaterial({
+// Example from RasterizationVisualization
+const pixelMaterial = new THREE.ShaderMaterial({
   uniforms: {
-    lightPosition: { value: new THREE.Vector3(5, 5, 5) },
-    ambientColor: { value: new THREE.Color(0.1, 0.1, 0.1) },
-    diffuseColor: { value: new THREE.Color(0.7, 0.7, 0.7) },
-    specularColor: { value: new THREE.Color(1.0, 1.0, 1.0) },
-    shininess: { value: 30.0 }
+    time: { value: timeRef.current },
   },
-  vertexShader: vertexShaderSource,
-  fragmentShader: fragmentShaderSource
-});
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform float time;
+    varying vec2 vUv;
+    
+    void main() {
+      // Create pixelated effect
+      float pixelSize = 0.05;
+      vec2 pixelatedUV = floor(vUv / pixelSize) * pixelSize;
+      
+      // Add grid pattern
+      float gridLine = step(0.98, mod(vUv.x / pixelSize, 1.0)) + 
+                      step(0.98, mod(vUv.y / pixelSize, 1.0));
+      
+      // Base color based on UV coordinates
+      vec3 color = vec3(pixelatedUV.x, pixelatedUV.y, sin(time) * 0.5 + 0.5);
+      
+      // Apply grid lines
+      color = mix(color, vec3(0.0), gridLine);
+      
+      gl_FragColor = vec4(color, 1.0);
+    }
+  `,
+  side: THREE.DoubleSide,
+})
 ```
 
 ### Dynamic Shader Manipulation
@@ -222,17 +351,19 @@ const customMaterial = new THREE.ShaderMaterial({
 Our project allows real-time modification of shader parameters, enabling users to see immediate visual feedback:
 
 ```javascript
-// Example: Updating shader uniforms based on UI controls
-useEffect(() => {
-  if (material.current) {
-    material.current.uniforms.lightPosition.value.set(
-      lightPosition.x,
-      lightPosition.y,
-      lightPosition.z
-    );
-    material.current.uniforms.shininess.value = shininess;
+// Animation for pixel material from RasterizationVisualization
+useFrame(({ clock }) => {
+  if (!showDepthBuffer) {
+    pixelMaterial.uniforms.time.value = clock.getElapsedTime()
   }
-}, [lightPosition, shininess]);
+})
+
+// Animate the split material from FragmentVisualization
+useFrame(({ clock }) => {
+  if (splitView) {
+    splitMaterial.uniforms.time.value = clock.getElapsedTime()
+  }
+})
 ```
 
 ### Stage-Specific Shader Techniques
@@ -290,3 +421,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ---
 
 Designed and developed for educational purposes to make computer graphics concepts more accessible and understandable.
+
+找到具有 1 个许可证类型的类似代码
