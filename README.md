@@ -1,5 +1,9 @@
 # Three.js Rendering Pipeline Demo
 
+<div align="center">
+  <strong>🔗 <a href="https://threejs-rendering-pipeline-demo.vercel.app/">在线演示 | Live Demo</a> 🔗</strong>
+</div>
+
 An interactive educational visualization of the 3D graphics rendering pipeline implemented using Three.js and React.
 
 ![Three.js Rendering Pipeline Demo](https://raw.githubusercontent.com/deep-river/ThreeJSRenderingPipelineDemo/refs/heads/main/Screenshots/ThreeJSRPD-01.jpg)
